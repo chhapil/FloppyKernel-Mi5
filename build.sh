@@ -537,8 +537,9 @@ elif [ -e build.sh ]; then
 		kernelname=$(cat Makefile | grep NAME | cut -c 8- | head -1)
 		release=$(date +%d""%m""%Y)
 		releasewithbar=$(date +%d"/"%m"/"%Y)
+		GETVER=$(cat .config | grep 'Chhapil-.*-V' |sed 's/Chhapil-FloppyKernel-//g' | sed 's/.*".//g' | sed 's/"//');
 		build=$(cat .version)
-		export zipfile="${customkernel}-${name}-${variant}-${release}-${ToolchainName}-${romversion}.zip"
+		export zipfile="${customkernel}-${name}-${ToolchainName}-${romversion}-${GETVER}.zip"
 		buildsh
 	done
 else
