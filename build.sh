@@ -541,11 +541,7 @@ elif [ -e build.sh ]; then
 		releasewithbar=$(date +%d"/"%m"/"%Y)
 		GETVER=$(cat .config | grep 'Chhapil-.*-V' |sed 's/Chhapil-FloppyKernel-//g' | sed 's/.*".//g' | sed 's/"//');
 		build=$(cat .version)
-<<<<<<< HEAD
 		export zipfile="${customkernel}-${name}-${ToolchainName}-${romversion}-${GETVER}.zip"
-=======
-		export zipfile="${customkernel}-${name}-${variant}-${release}-${ToolchainName}-${androidversion}-${romversion}.zip"
->>>>>>> e6796dc3... build.sh: added variable to show android version in name zip
 		buildsh
 	done
 else
