@@ -148,7 +148,7 @@ then
 	export KBUILD_BUILD_USER="Chhapil"
         export KBUILD_BUILD_HOST="Sanganak"
 
-	NR_CPUS=$(($(grep -c ^processor /proc/cpuinfo) + 1))
+	NR_CPUS=$(($(grep -c ^processor /proc/cpuinfo) + 2))
 	echo "${bldblu}Building ${customkernel} with ${NR_CPUS} jobs at once${txtrst}"
 
 	START=$(date +"%s")
