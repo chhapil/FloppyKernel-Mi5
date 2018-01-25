@@ -154,7 +154,6 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	if (pressure >= 95) {
 		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
 			global_page_state(NR_SHMEM) -
-			global_page_state(NR_UNEVICTABLE) -
 			total_swapcache_pages();
 		other_free = global_page_state(NR_FREE_PAGES);
 
@@ -168,7 +167,6 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 
 		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
 			global_page_state(NR_SHMEM) -
-			global_page_state(NR_UNEVICTABLE) -
 			total_swapcache_pages();
 
 		other_free = global_page_state(NR_FREE_PAGES);
@@ -405,7 +403,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 
 	other_free = global_page_state(NR_FREE_PAGES);
 
-	if (global_page_state(NR_SHMEM) + global_page_state(NR_UNEVICTABLE) + total_swapcache_pages() <
+	if (global_page_state(NR_SHMEM) + total_swapcache_pages() <
 		global_page_state(NR_FILE_PAGES) + zcache_pages())
 		other_file = global_page_state(NR_FILE_PAGES) + zcache_pages() -
 						global_page_state(NR_SHMEM) -
@@ -505,6 +503,8 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 				"   Total reserve is %ldkB\n" \
 				"   Total free pages is %ldkB\n" \
 				"   Total file cache is %ldkB\n" \
+				"   SHMEM is %ldkB\n" \
+				"   SwapCached is %ldkB\n" \
 				"   Total zcache is %ldkB\n" \
 				"   GFP mask is 0x%x\n",
 			     selected->comm, selected->pid,
@@ -520,6 +520,10 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			     global_page_state(NR_FREE_PAGES) *
 				(long)(PAGE_SIZE / 1024),
 			     global_page_state(NR_FILE_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+				global_page_state(NR_SHMEM) *
+				(long)(PAGE_SIZE / 1024),
+				total_swapcache_pages() *
 				(long)(PAGE_SIZE / 1024),
 			     (long)zcache_pages() * (long)(PAGE_SIZE / 1024),
 			     sc->gfp_mask);

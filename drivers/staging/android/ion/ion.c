@@ -346,7 +346,7 @@ static void ion_buffer_remove_from_handle(struct ion_buffer *buffer)
 
 		task = current->group_leader;
 		get_task_comm(buffer->task_comm, task);
-		buffer->pid = task_pid_nr(task);
+		buffer->pid = task_pid_nr(task);        
 		atomic_sub(buffer->size, &buffer->heap->total_handles);
 	}
 	mutex_unlock(&buffer->lock);
@@ -441,8 +441,7 @@ static void user_ion_handle_get(struct ion_handle *handle)
 }
 
 /* Must hold the client lock */
-static struct ion_handle *user_ion_handle_get_check_overflow(
-	struct ion_handle *handle)
+static struct ion_handle *user_ion_handle_get_check_overflow(struct ion_handle *handle)
 {
 	if (handle->user_ref_count + 1 == 0)
 		return ERR_PTR(-EOVERFLOW);
@@ -468,7 +467,7 @@ static struct ion_handle *pass_to_user(struct ion_handle *handle)
 /* Must hold the client lock */
 static int user_ion_handle_put_nolock(struct ion_handle *handle)
 {
-	int ret = 0;
+	int ret;
 
 	if (--handle->user_ref_count == 0)
 		ret = ion_handle_put_nolock(handle);
@@ -604,7 +603,6 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 					   heap_id_mask, flags);
 		if (!IS_ERR(buffer))
 			break;
-
 		trace_ion_alloc_buffer_fallback(client->name, heap->name, len,
 					    heap_id_mask, flags,
 					    PTR_ERR(buffer));
@@ -687,8 +685,8 @@ static void ion_free_nolock(struct ion_client *client, struct ion_handle *handle
 	ion_handle_put_nolock(handle);
 }
 
-static void user_ion_free_nolock(struct ion_client *client,
-				 struct ion_handle *handle)
+/* Must hold the client lock */
+static void user_ion_free_nolock(struct ion_client *client, struct ion_handle *handle)
 {
 	bool valid_handle;
 
@@ -988,7 +986,8 @@ struct ion_client *ion_client_create(struct ion_device *dev,
 	client->debug_root = debugfs_create_file(client->display_name, 0664,
 						dev->clients_debug_root,
 						client, &debug_client_fops);
-	if (!client->debug_root) {
+	if (IS_ERR_OR_NULL(client->debug_root) &&
+		!IS_ERR_OR_NULL(dev->clients_debug_root)) {
 		char buf[256], *path;
 
 		path = dentry_path(dev->clients_debug_root, buf, 256);
@@ -1849,22 +1848,28 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	up_read(&dev->lock);
 	seq_puts(s, "----------------------------------------------------\n");
 	seq_puts(s, "orphaned allocations (info is from last known client):\n");
-	mutex_lock(&dev->buffer_lock);
-	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
-		struct ion_buffer *buffer = rb_entry(n, struct ion_buffer,
-						     node);
-		if (buffer->heap->id != heap->id)
-			continue;
-		total_size += buffer->size;
-		if (!buffer->handle_count) {
-			seq_printf(s, "%16.s %16u %16zu %d %d\n",
-				   buffer->task_comm, buffer->pid,
-				   buffer->size, buffer->kmap_cnt,
-				   atomic_read(&buffer->ref.refcount));
-			total_orphaned_size += buffer->size;
-		}
-	}
-	mutex_unlock(&dev->buffer_lock);
+    mutex_lock(&dev->buffer_lock);
+    for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
+        struct ion_buffer *buffer = rb_entry(n, struct ion_buffer,
+                             node);
+        if (buffer->heap->id != heap->id)
+            continue;
+        total_size += buffer->size;
+        if (!buffer->handle_count) {
+            seq_printf(s, "%p %16.s %16u %16u %16u %16zu %d %d %d %d\n",
+                   buffer, buffer->task_comm, buffer->client_tgid, buffer->client_pid, buffer->pid,
+                   buffer->size, buffer->kmap_cnt,
+                   atomic_read(&buffer->ref.refcount), buffer->heap->id, buffer->handle_count);
+            total_orphaned_size += buffer->size;
+        }
+        else {
+            seq_printf(s, "%p %16.s %16u %16u %16u %16zu %d %d %d %d\n",
+                               buffer, buffer->task_comm, buffer->client_tgid, buffer->client_pid, buffer->pid,
+                               buffer->size, buffer->kmap_cnt,
+                               atomic_read(&buffer->ref.refcount), buffer->heap->id, buffer->handle_count);
+        }
+    }
+    mutex_unlock(&dev->buffer_lock);
 	seq_puts(s, "----------------------------------------------------\n");
 	seq_printf(s, "%16.s %16zu\n", "total orphaned",
 		   total_orphaned_size);
@@ -1982,7 +1987,8 @@ void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
 					dev->heaps_debug_root, heap,
 					&debug_heap_fops);
 
-	if (!debug_file) {
+	if (IS_ERR_OR_NULL(debug_file) &&
+		!IS_ERR_OR_NULL(dev->heaps_debug_root)) {
 		char buf[256], *path;
 
 		path = dentry_path(dev->heaps_debug_root, buf, 256);
@@ -1998,7 +2004,8 @@ void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
 		debug_file = debugfs_create_file(
 			debug_name, 0644, dev->heaps_debug_root, heap,
 			&debug_shrink_fops);
-		if (!debug_file) {
+		if (IS_ERR_OR_NULL(debug_file) &&
+			!IS_ERR_OR_NULL(dev->heaps_debug_root)) {
 			char buf[256], *path;
 
 			path = dentry_path(dev->heaps_debug_root, buf, 256);
@@ -2057,18 +2064,18 @@ struct ion_device *ion_device_create(long (*custom_ioctl)
 	}
 
 	idev->debug_root = debugfs_create_dir("ion", NULL);
-	if (!idev->debug_root) {
+	if (IS_ERR_OR_NULL(idev->debug_root)) {
 		pr_err("ion: failed to create debugfs root directory.\n");
 		goto debugfs_done;
 	}
 	idev->heaps_debug_root = debugfs_create_dir("heaps", idev->debug_root);
-	if (!idev->heaps_debug_root) {
+	if (IS_ERR_OR_NULL(idev->heaps_debug_root)) {
 		pr_err("ion: failed to create debugfs heaps directory.\n");
 		goto debugfs_done;
 	}
 	idev->clients_debug_root = debugfs_create_dir("clients",
 						idev->debug_root);
-	if (!idev->clients_debug_root)
+	if (IS_ERR_OR_NULL(idev->clients_debug_root))
 		pr_err("ion: failed to create debugfs clients directory.\n");
 
 debugfs_done:
