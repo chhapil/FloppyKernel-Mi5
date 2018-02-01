@@ -632,9 +632,6 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 						&new_policy.governor))
 		return -EINVAL;
 
-	new_policy.min = new_policy.user_policy.min;
-	new_policy.max = new_policy.user_policy.max;
-
 	ret = cpufreq_set_policy(policy, &new_policy);
 
 	policy->user_policy.policy = policy->policy;
@@ -1517,10 +1514,8 @@ static int __cpufreq_remove_dev_finish(struct device *dev,
 		list_del(&policy->policy_list);
 		write_unlock_irqrestore(&cpufreq_driver_lock, flags);
 
-		if (!cpufreq_suspended) {
-			flush_work(&policy->update);
+		if (!cpufreq_suspended)
 			cpufreq_policy_free(policy);
-		}
 	} else if (has_target()) {
 		ret = __cpufreq_governor(policy, CPUFREQ_GOV_START);
 		if (!ret)
@@ -2073,22 +2068,6 @@ EXPORT_SYMBOL_GPL(cpufreq_driver_target);
  * when "event" is CPUFREQ_GOV_LIMITS
  */
 
- int __cpufreq_driver_getavg(struct cpufreq_policy *policy, unsigned int cpu)
- {
-     int ret = 0;
-     
-     policy = cpufreq_cpu_get(policy->cpu);
-     if (!policy)
-     return -EINVAL;
-     
-     if (cpu_online(cpu) && cpufreq_driver->getavg)
-     ret = cpufreq_driver->getavg(policy, cpu);
-     
-     cpufreq_cpu_put(policy);
-     return ret;
- }
- EXPORT_SYMBOL_GPL(__cpufreq_driver_getavg);
- 
 static int __cpufreq_governor(struct cpufreq_policy *policy,
 					unsigned int event)
 {

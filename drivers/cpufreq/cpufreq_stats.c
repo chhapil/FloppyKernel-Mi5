@@ -139,6 +139,9 @@ void acct_update_power(struct task_struct *task, cputime_t cputime) {
 	if (!powerstats || !stats)
 		return;
 
+    if (stats->last_index == -1)
+       return;
+
 	curr = powerstats->curr[stats->last_index];
 	if (task->cpu_power != ULLONG_MAX)
 		task->cpu_power += curr * cputime_to_usecs(cputime);
@@ -416,17 +419,11 @@ error_out:
 
 static void cpufreq_stats_update_policy_cpu(struct cpufreq_policy *policy)
 {
-	struct cpufreq_stats *stat;
+	struct cpufreq_stats *stat = per_cpu(cpufreq_stats_table,
+			policy->last_cpu);
 
 	pr_debug("Updating stats_table for new_cpu %u from last_cpu %u\n",
 			policy->cpu, policy->last_cpu);
-	stat = per_cpu(cpufreq_stats_table, policy->cpu);
-	if (stat) {
-		kfree(stat->time_in_state);
-		kfree(stat);
-	}
-
-	stat = per_cpu(cpufreq_stats_table, policy->last_cpu);
 	per_cpu(cpufreq_stats_table, policy->cpu) = per_cpu(cpufreq_stats_table,
 			policy->last_cpu);
 	per_cpu(cpufreq_stats_table, policy->last_cpu) = NULL;
@@ -608,14 +605,14 @@ static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 	if (val == CPUFREQ_UPDATE_POLICY_CPU) {
 		cpufreq_stats_update_policy_cpu(policy);
 		return 0;
-	} else if (val == CPUFREQ_REMOVE_POLICY) {
-		__cpufreq_stats_free_table(policy);
-		return 0;
 	}
 
 	table = cpufreq_frequency_get_table(cpu);
-	if (!table)
+	if (!table) {
+		if (val == CPUFREQ_REMOVE_POLICY)
+			__cpufreq_stats_free_table(policy);
 		return 0;
+	}
 
 	cpufreq_for_each_valid_entry(pos, table)
 		count++;
@@ -630,6 +627,8 @@ static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 
 	if (val == CPUFREQ_CREATE_POLICY)
 		ret = __cpufreq_stats_create_table(policy, table, count);
+	else if (val == CPUFREQ_REMOVE_POLICY)
+		__cpufreq_stats_free_table(policy);
 
 	return ret;
 }
