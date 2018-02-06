@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -501,7 +501,7 @@ static bool tlshim_is_pkt_drop_candidate(tp_wma_handle wma_handle,
 
 	peer = ol_txrx_find_peer_by_addr(pdev_ctx, peer_addr, &peer_id);
 	if (!peer) {
-		if (SIR_MAC_MGMT_ASSOC_REQ != subtype) {
+		if (IEEE80211_FC0_SUBTYPE_ASSOC_REQ != subtype) {
 			TLSHIM_LOGE(FL("Received mgmt frame: %0x from unknow peer: %pM"),
 				subtype, peer_addr);
 			should_drop = TRUE;
@@ -510,7 +510,7 @@ static bool tlshim_is_pkt_drop_candidate(tp_wma_handle wma_handle,
 	}
 
 	switch (subtype) {
-	case SIR_MAC_MGMT_ASSOC_REQ:
+	case IEEE80211_FC0_SUBTYPE_ASSOC_REQ:
 		if (peer->last_assoc_rcvd) {
 			if (adf_os_gettimestamp() - peer->last_assoc_rcvd <
 			    TLSHIM_MGMT_FRAME_DETECT_DOS_TIMER) {
@@ -520,7 +520,7 @@ static bool tlshim_is_pkt_drop_candidate(tp_wma_handle wma_handle,
 		}
 		peer->last_assoc_rcvd = adf_os_gettimestamp();
 		break;
-	case SIR_MAC_MGMT_DISASSOC:
+	case IEEE80211_FC0_SUBTYPE_DISASSOC:
 		if (peer->last_disassoc_rcvd) {
 			if (adf_os_gettimestamp() -
 			    peer->last_disassoc_rcvd <
@@ -531,7 +531,7 @@ static bool tlshim_is_pkt_drop_candidate(tp_wma_handle wma_handle,
 		}
 		peer->last_disassoc_rcvd = adf_os_gettimestamp();
 		break;
-	case SIR_MAC_MGMT_DEAUTH:
+	case IEEE80211_FC0_SUBTYPE_DEAUTH:
 		if (peer->last_deauth_rcvd) {
 			if (adf_os_gettimestamp() -
 			    peer->last_deauth_rcvd <
@@ -596,11 +596,9 @@ static int tlshim_mgmt_rx_process(void *context, u_int8_t *data,
 		return 0;
 	}
 
-	if (hdr->buf_len < sizeof(struct ieee80211_frame) ||
-		hdr->buf_len > data_len) {
+	if (hdr->buf_len < sizeof(struct ieee80211_frame)) {
 		adf_os_spin_unlock_bh(&tl_shim->mgmt_lock);
-		TLSHIM_LOGE("Invalid rx mgmt packet, data_len %u, hdr->buf_len %u",
-				data_len, hdr->buf_len);
+		TLSHIM_LOGE("Invalid rx mgmt packet");
 		return 0;
 	}
 
@@ -1238,10 +1236,16 @@ void *tlshim_peer_validity(void *vos_ctx, uint8_t sta_id)
 {
 	struct txrx_tl_shim_ctx *tl_shim = vos_get_context(VOS_MODULE_ID_TL,
 							vos_ctx);
+	struct ol_txrx_pdev_t *pdev = vos_get_context(VOS_MODULE_ID_TXRX,
+							vos_ctx);
 	struct ol_txrx_peer_t *peer;
 
 	if (!tl_shim) {
 		TLSHIM_LOGE("tl_shim is NULL");
+		return NULL;
+	}
+	if (!pdev) {
+		TLSHIM_LOGE("pdev is NULL");
 		return NULL;
 	}
 
@@ -1255,14 +1259,38 @@ void *tlshim_peer_validity(void *vos_ctx, uint8_t sta_id)
 		return NULL;
 	}
 
-	peer = ol_txrx_peer_find_by_local_id(
-			((pVosContextType) vos_ctx)->pdev_txrx_ctx,
-			sta_id);
+	peer = ol_txrx_peer_find_by_local_id(pdev, sta_id);
 	if (!peer) {
 		TLSHIM_LOGW("Invalid peer");
 		return NULL;
 	} else {
 		return (void *)peer->vdev;
+	}
+}
+
+/**
+ * tlshim_selfpeer_vdev() - get the vdev of self peer
+ * @vos_ctx: vos context
+ *
+ * Return: on success return vdev, NULL when self peer is invalid/NULL
+ */
+void *tlshim_selfpeer_vdev(void *vos_ctx)
+{
+	struct ol_txrx_pdev_t *pdev = vos_get_context(VOS_MODULE_ID_TXRX,
+							   vos_ctx);
+	struct ol_txrx_peer_t *peer;
+
+	if (!pdev) {
+		TLSHIM_LOGE("Txrx pdev is NULL");
+		return NULL;
+	}
+
+	peer = pdev->self_peer;
+	if (!peer) {
+		TLSHIM_LOGW("Invalid peer");
+		return NULL;
+	} else {
+		return peer->vdev;
 	}
 }
 
@@ -1988,6 +2016,7 @@ VOS_STATUS WLANTL_Close(void *vos_ctx)
 VOS_STATUS WLANTL_Open(void *vos_ctx, WLANTL_ConfigInfoType *tl_cfg)
 {
 	struct txrx_tl_shim_ctx *tl_shim;
+	ol_txrx_pdev_handle txrx_pdev;
 	VOS_STATUS status;
 	u_int8_t i;
 	int max_vdev;
@@ -1998,7 +2027,7 @@ VOS_STATUS WLANTL_Open(void *vos_ctx, WLANTL_ConfigInfoType *tl_cfg)
 	if (status != VOS_STATUS_SUCCESS)
 		return status;
 
-	((pVosContextType) vos_ctx)->pdev_txrx_ctx =
+	txrx_pdev = ((pVosContextType) vos_ctx)->pdev_txrx_ctx =
 				wdi_in_pdev_attach(
 					((pVosContextType) vos_ctx)->cfg_ctx,
 					((pVosContextType) vos_ctx)->htc_ctx,
@@ -2008,6 +2037,8 @@ VOS_STATUS WLANTL_Open(void *vos_ctx, WLANTL_ConfigInfoType *tl_cfg)
 		vos_free_context(vos_ctx, VOS_MODULE_ID_TL, tl_shim);
 		return VOS_STATUS_E_NOMEM;
 	}
+
+	ol_tx_failure_cb_set(txrx_pdev, wma_tx_failure_cb);
 
 	adf_os_spinlock_init(&tl_shim->bufq_lock);
 	adf_os_spinlock_init(&tl_shim->mgmt_lock);
@@ -2104,6 +2135,42 @@ VOS_STATUS tl_shim_get_vdevid(struct ol_txrx_peer_t *peer, u_int8_t *vdev_id)
 	return VOS_STATUS_SUCCESS;
 }
 
+#ifdef QCA_SUPPORT_TXRX_LOCAL_PEER_ID
+/**
+ * tl_shim_get_sta_id_by_addr() - get peer local id given the MAC address.
+ * @vos_context: pointer to vos context
+ * @mac_addr: pointer to mac address
+ *
+ * Return: local id of the peer given the MAC address.
+ */
+uint16_t tl_shim_get_sta_id_by_addr(void *vos_context, uint8_t *mac_addr)
+{
+	struct ol_txrx_peer_t *peer;
+	ol_txrx_pdev_handle pdev;
+	uint8_t peer_id;
+
+	if (vos_context == NULL || mac_addr == NULL) {
+		TLSHIM_LOGE("Invalid argument %pK, %pK", vos_context, mac_addr);
+		return 0;
+	}
+
+	pdev = vos_get_context(VOS_MODULE_ID_TXRX, vos_context);
+	if (!pdev) {
+		TLSHIM_LOGE("PDEV [%pM] not found", mac_addr);
+		return 0;
+	}
+
+	peer = ol_txrx_find_peer_by_addr(pdev, mac_addr, &peer_id);
+
+	if (!peer) {
+		TLSHIM_LOGW("PEER [%pM] not found", mac_addr);
+		return 0;
+	}
+
+	return peer->local_id;
+}
+#endif
+
 /*
  * Function to get vdev(tl_context) given the MAC address.
  */
@@ -2114,7 +2181,7 @@ void *tl_shim_get_vdev_by_addr(void *vos_context, uint8_t *mac_addr)
 	uint8_t peer_id;
 
 	if (vos_context == NULL || mac_addr == NULL) {
-		TLSHIM_LOGE("Invalid argument %p, %p", vos_context, mac_addr);
+		TLSHIM_LOGE("Invalid argument %pK, %pK", vos_context, mac_addr);
 		return NULL;
 	}
 
