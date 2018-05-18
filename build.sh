@@ -238,8 +238,8 @@ if [ -f arch/${ARCH}/boot/Image.gz ] || [ -f arch/${ARCH}/boot/Image.lzma ] || [
 		if [ "${compressedimage}" == "${bldyel}ON${txtrst}" ];
 		then
 
-			if [ -f arch/${ARCH}/boot/Image.gz ]; then
-				cp arch/${ARCH}/boot/Image.gz ${zipdirout}/zImage
+			if [ -f arch/${ARCH}/boot/Image.gz-dtb ]; then
+				cp arch/${ARCH}/boot/Image.gz-dtb ${zipdirout}/zImage
 
 			elif [ -f arch/${ARCH}/boot/Image.lzma ]; then
 				cp arch/${ARCH}/boot/Image.lzma ${zipdirout}/zImage
@@ -263,7 +263,7 @@ if [ -f arch/${ARCH}/boot/Image.gz ] || [ -f arch/${ARCH}/boot/Image.lzma ] || [
 	
 		fi
 
-		cp arch/${ARCH}/boot/dt.img ${zipdirout}/dtb
+		# cp arch/${ARCH}/boot/dt.img ${zipdirout}/dtb
 
 		echo "customkernel=${customkernel}" >> ${zipdirout}/device.prop
 		echo "name=${name}" >> ${zipdirout}/device.prop
@@ -278,9 +278,9 @@ if [ -f arch/${ARCH}/boot/Image.gz ] || [ -f arch/${ARCH}/boot/Image.lzma ] || [
 		echo "name3=${name3}" >> ${zipdirout}/device.prop
 		echo "name4=${name4}" >> ${zipdirout}/device.prop
 
-		mkdir ${zipdirout}/modules
-		find . -name *.ko | xargs cp -a --target-directory=${zipdirout}/modules/ &> /dev/null
-		${CROSS_COMPILE}strip --strip-unneeded ${zipdirout}/modules/*.ko
+		mkdir -p ${zipdirout}/modules/system/lib/modules
+		find . -name *.ko | xargs cp -a --target-directory=${zipdirout}//modules/system/lib/modules/ &> /dev/null
+		${CROSS_COMPILE}strip --strip-unneeded ${zipdirout}/modules/system/lib/modules/*.ko
 
 		cd ${zipdirout}
 		zip -r ${zipfile} * -x .gitignore &> /dev/null
