@@ -4,12 +4,12 @@
 ## AnyKernel setup
 # begin properties
 properties() {
-kernel.string=
+kernel.string=Floppy Kernel by Chhapil
 do.devicecheck=1
 do.modules=1
 do.cleanup=0
 do.cleanuponabort=0
-device.name1=
+device.name1=gemini
 device.name2=
 device.name3=
 device.name4=
@@ -36,19 +36,20 @@ chown -R root:root $ramdisk/*;
 ## AnyKernel install
 dump_boot;
 
-## begin ramdisk changes
+# begin ramdisk changes
 
 # add floppy script
-insert_line init.qcom.rc "init.floppy.rc" after "import init.target.rc" "import init.floppy.rc";
+# insert_line init.qcom.rc "init.floppy.rc" after "import init.target.rc" "import init.floppy.rc";
 
 # add support for spectrum
-insert_line init.rc "import /init.spectrum.rc" after "import /init.floppy.rc" "import /init.spectrum.rc";
+# insert_line init.rc "import /init.spectrum.rc" after "import /init.floppy.rc" "import /init.spectrum.rc";
 
 # ramdisk patch
-ramdisk_patch;
+# ramdisk_patch;
 
-## end ramdisk changes
+# end ramdisk changes
 
 write_boot;
 
 ## end install
+
